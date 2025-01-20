@@ -6,6 +6,7 @@
   1. OPEN_AI_API_KEY=<YOUR_OPEN_AI_API_KEY>
   2. OPEN_AI_ORG_ID=<YOUR_OPEN_AI_ORG_ID>
 <br/>
+
 ## Usage
 - git clone repo
 - `npm i` to install dependencies
