@@ -23,7 +23,7 @@ async function extractPdfBook(fileName) {
   const pdfText = await readPdfText({url: path.join(__dirname, `${fileName}.pdf`)});
   fs.writeFile(path.join(__dirname, `${fileName}.txt`), pdfText, (err) => {
     if (err) {
-      console.error('Error writing file:', err);
+      throw err;
     }
   });
 };
@@ -51,7 +51,7 @@ async function parseXmlBook(fileName) {
   const text = extractText(result);
   fs.writeFile(path.join(__dirname, `${fileName}.txt`), text, (err) => {
     if (err) {
-      console.error('Error writing file:', err);
+      throw err;
     }
   });
   return text;
@@ -65,17 +65,18 @@ async function extractEpubBook(fileName) {
   epub.on("end", function() {
     fs.writeFile(path.join(__dirname, `${fileName}.txt`), '', (err) => {
       if (err) {
-        console.error('Error writing file:', err);
+        throw err;
       }
     });
     epub.flow.forEach(function(chapter) {
       epub.getChapter(chapter.id, function(err, text) {
         if (err) {
-          console.error(err);
-          return;
+          throw err;
         }
         fs.appendFile(`${fileName}.txt`, text.replace(/<[^>]+>/g, ''), (err) => {
-          if (err) throw err;
+          if (err) {
+            throw err;
+          }
         });
       });
     });
@@ -84,7 +85,10 @@ async function extractEpubBook(fileName) {
   epub.parse();
 };
 
-function chunk(s) {
+/**
+ * This function chunks up a large input string into smaller chunks.
+ */
+const chunk = (s) => {
   let buf = Buffer.from(s);
   let maxBytes = 1000;
   const result = [];
@@ -99,11 +103,6 @@ function chunk(s) {
       buf = buf.slice(i+1); // Skip space (if any)
   }
   return result;
-}
-
-const convertTextToJsonl = async (fileName) => {
-  const textData = await fs.readFileSync(`${fileName}.txt`, 'utf-8');
-  await fs.writeFileSync(`${fileName}.jsonl`, JSON.stringify({text: textData}));
 }
 
 async function generateBookSummary(filePath) {
@@ -131,7 +130,7 @@ async function generateBookSummary(filePath) {
   const bookSummaryContent = completion.choices[0].message.content;
   fs.writeFile(`${filePath.split('.txt')[0]}_Summary.txt`, bookSummaryContent, (err) => {
     if (err) {
-      console.error('Error writing file:', err);
+      throw err;
     }
   });
 }
@@ -181,12 +180,18 @@ async function generateBookReport(filePaths) {
   const bookReportContent = completion.choices[0].message.content;
   fs.writeFile(path.join(__dirname, `BookReport_${Date.now()}.txt`), bookReportContent, (err) => {
     if (err) {
-      console.error('Error writing file:', err);
+      throw err;
     }
   });
 }
 
-
+/**
+ * This function will check if we need to create a .txt file of a given file.
+ * This function has the capacity to parse XML, PDF, and Epub file formtats into a .txt file
+ * 
+ * Once it does that, we will then feed those .txt files into gpt-4o-mini and generate Summaries
+ * for the target file / book.
+ */
 const waitOnSummary = async (fileName) => {
   try {
     const fileList = await fs.readdirSync(__dirname);
@@ -195,32 +200,30 @@ const waitOnSummary = async (fileName) => {
 
     if (!isFileInCwd) {
       throw new Error(`File: ${fileName} is not found.`);
-    }  
+    }
 
-    const fileType = path.extname(fileFound[0])
-    switch(fileType) {
-      case '.epub':
-        await extractEpubBook(fileName);
-        break;
-      case '.pdf':
-        await extractPdfBook(fileName);
-        break;
-      case '.xml':
-        await parseXmlBook(fileName);
-        break;
-      default:
-        return;
+    if (!fileList.some(file => file === fileName + '.txt')) {
+      const fileType = path.extname(fileFound[0]);
+
+      switch(fileType) {
+        case '.epub':
+          await extractEpubBook(fileName);
+          break;
+        case '.pdf':
+          await extractPdfBook(fileName);
+          break;
+        case '.xml':
+          await parseXmlBook(fileName);
+          break;
+        default:
+          return;
+      }
     }
 
     waitOn({ resources: [`${fileName}.txt`] }).then(async () => {
-      if (!fileList.filter(file => file.indexOf(fileName + '.jsonl') >= 0)) {
-        await convertTextToJsonl(fileName);
+      if (!fileList.some(file => file === fileName + '_Summary.txt')) {
+        await generateBookSummary(path.join(__dirname, `${fileName}.txt`));
       }
-      waitOn({ resources: [`${fileName}.jsonl`]}).then(async () => {
-        if (!fileList.filter(file => file.indexOf(fileName + '_Summary') >= 0)) {
-          await generateBookSummary(path.join(__dirname, `${fileName}.txt`));
-        }
-      });
     });
   } catch (e) {
     console.error(e);
@@ -228,20 +231,33 @@ const waitOnSummary = async (fileName) => {
 };
 
 const waitOnBookReport = async (resources) => {
-  waitOn({ resources }).then(async () => {
-    await generateBookReport(resources.map(resource => path.join(__dirname, resource)));
-  });
+  try {
+    waitOn({ resources }).then(async () => {
+      await generateBookReport(resources.map(resource => path.join(__dirname, resource)));
+    });
+  } catch (e) {
+    console.error(e);
+  }
 };
 
+/**
+ * What this program does is it will go through each book and convert it into a .txt file.
+ * Then each .txt file for each book will be fed into OpenAI's gpt-4o-mini LLM to create
+ * a summary.
+ * 
+ * Once we have a summary for each book, we will then add all of those to our list of prompts into a new
+ * completion and generate a book report for all of the books.
+ */
 const main = async () => {
   const filesList = await fs.readdirSync(__dirname);
-  if (!filesList.some(files => files.indexOf('the_stranger_Summary'))) {
+
+  if (!filesList.some(file => file === 'the_stranger_Summary.txt')) {
     await waitOnSummary('the_stranger');
   }
-  if (!filesList.some(files => files.indexOf('The-Bell-Jar-1645639705._vanilla_Summary'))) {
+  if (!filesList.some(file => file === 'The-Bell-Jar-1645639705._vanilla_Summary.txt')) {
     await waitOnSummary('The-Bell-Jar-1645639705._vanilla');
   }
-  if (!filesList.some(files => files.indexOf('franz-kafka_metamorphosis_Summary'))) {
+  if (!filesList.some(file => file === 'franz-kafka_metamorphosis_Summary.txt')) {
     await waitOnSummary('franz-kafka_metamorphosis');
   }
   await waitOnBookReport([
