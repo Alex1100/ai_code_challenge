@@ -11,22 +11,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@ridi/epub-parser": "^0.7.4-alpha.1",
-    "adm-zip": "^0.5.16",
-    "axios": "^1.7.9",
     "dotenv": "^16.4.7",
-    "elementtree": "^0.1.7",
     "epub2": "^3.0.2",
-    "express": "^4.21.2",
-    "express-fileupload": "^1.5.1",
-    "express-hogan-pdf": "^2.1.0",
-    "fast-xml-parser": "^4.5.1",
-    "node-ebook-converter": "^1.0.11",
     "openai": "^4.79.1",
-    "pdf-lib": "^1.17.1",
     "pdf-text-reader": "^5.1.0",
     "wait-on": "^8.0.2",
-    "xml-js": "^1.6.11",
-    "xml2pdf": "^1.1.0"
+    "xml-js": "^1.6.11"
   }
 }
