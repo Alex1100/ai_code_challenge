@@ -8,7 +8,7 @@
 <br/>
 
 ## Usage
-- git clone repo
+- `git clone https://github.com/Alex1100/ai_code_challenge.git`
 - `npm i` to install dependencies
 - `npm start` to start the application
 <br/>
